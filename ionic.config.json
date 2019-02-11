@@ -1,0 +1,7 @@
+{
+  "name": "IMDB",
+  "integrations": {
+    "cordova": {}
+  },
+  "type": "angular"
+}
