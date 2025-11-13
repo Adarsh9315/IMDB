@@ -1,41 +1,186 @@
-<ion-header>
-  <ion-toolbar color="primary">
-    <ion-title>My Movie Search</ion-title>
+<ion-header [translucent]="true" class="ion-no-border">
+  <ion-toolbar>
+    <ion-title>
+      <div class="title-container">
+        <ion-icon name="videocam" class="title-icon"></ion-icon>
+        <span class="gradient-text">CineSearch</span>
+      </div>
+    </ion-title>
+    <ion-buttons slot="end">
+      <ion-button (click)="toggleDarkMode()">
+        <ion-icon slot="icon-only" [name]="darkMode() ? 'sunny' : 'moon'"></ion-icon>
+      </ion-button>
+    </ion-buttons>
   </ion-toolbar>
 </ion-header>
 
-<ion-content>
+<ion-content [fullscreen]="true" class="ion-padding">
+  <ion-refresher slot="fixed" (ionRefresh)="handleRefresh($event)">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
 
-  <ion-searchbar [(ngModel)]="searchTerm" (ionChange)="searchChanged($event)"></ion-searchbar>
+  <div class="search-container">
+    <ion-searchbar
+      [(ngModel)]="searchTerm"
+      (ionInput)="searchChanged($event)"
+      (ionFocus)="onSearchFocus()"
+      placeholder="Search movies, series, episodes..."
+      [debounce]="500"
+      animated="true"
+      class="custom-searchbar">
+    </ion-searchbar>
 
-  <ion-item>
-    <ion-label>Select Searchtype</ion-label>
-    <ion-select [(ngModel)]="type" (ionChange)="searchChanged($event)">
-      <ion-select-option value="">All</ion-select-option>
-      <ion-select-option value="movie">Movie</ion-select-option>
-      <ion-select-option value="series">Series</ion-select-option>
-      <ion-select-option value="episode">Episode</ion-select-option>
-    </ion-select>
-  </ion-item>
-
-  <ion-list>
-
-    <ion-item button *ngFor="let item of (results | async)" [routerLink]="['/', 'movies', item.imdbID]">
-      <ion-avatar slot="start">
-        <img [src]="item.Poster" *ngIf="item.Poster != 'N/A'">
-      </ion-avatar>
-
-      <ion-label text-wrap>
-        <h3>{{ item.Title }}</h3>
-        {{ item.Year }}
-      </ion-label>
-
-      <ion-icon slot="end" *ngIf="item.Type == 'movie'" name="videocam"></ion-icon>
-      <ion-icon slot="end" *ngIf="item.Type == 'series'" name="tv"></ion-icon>
-      <ion-icon slot="end" *ngIf="item.Type == 'game'" name="logo-game-controller-b"></ion-icon>
-
+    <ion-item lines="none" class="filter-item">
+      <ion-label>Type</ion-label>
+      <ion-select [(ngModel)]="type" (ionChange)="searchChanged($event)" interface="popover">
+        <ion-select-option value="">All</ion-select-option>
+        <ion-select-option value="movie">Movies</ion-select-option>
+        <ion-select-option value="series">Series</ion-select-option>
+        <ion-select-option value="episode">Episodes</ion-select-option>
+      </ion-select>
     </ion-item>
+  </div>
 
-  </ion-list>
+  <!-- Search History -->
+  @if (showHistory() && searchHistory().length > 0) {
+    <ion-card class="history-card">
+      <ion-card-content>
+        <div class="history-header">
+          <h3>Recent Searches</h3>
+          <ion-button fill="clear" size="small" (click)="clearHistory()">
+            <ion-icon slot="icon-only" name="close"></ion-icon>
+          </ion-button>
+        </div>
+        <div class="history-chips">
+          @for (term of searchHistory(); track term) {
+            <ion-chip (click)="selectHistoryItem(term)">
+              <ion-icon name="search"></ion-icon>
+              <ion-label>{{ term }}</ion-label>
+            </ion-chip>
+          }
+        </div>
+      </ion-card-content>
+    </ion-card>
+  }
 
+  <!-- Favorites Section -->
+  @if (favorites().length > 0 && !searchTerm()) {
+    <div class="section-header">
+      <h2>
+        <ion-icon name="heart"></ion-icon>
+        My Favorites
+      </h2>
+    </div>
+    <ion-list class="movie-list">
+      @for (item of favorites(); track item.imdbID) {
+        <ion-item button [routerLink]="['/', 'movies', item.imdbID]" class="movie-item" lines="none">
+          <ion-avatar slot="start" class="movie-avatar">
+            @if (item.Poster !== 'N/A') {
+              <img [src]="item.Poster" [alt]="item.Title">
+            } @else {
+              <div class="no-poster">
+                <ion-icon name="videocam"></ion-icon>
+              </div>
+            }
+          </ion-avatar>
+
+          <ion-label class="ion-text-wrap">
+            <h2>{{ item.Title }}</h2>
+            <p>{{ item.Year }}</p>
+          </ion-label>
+
+          <div slot="end" class="item-end">
+            <ion-icon 
+              [name]="item.Type === 'movie' ? 'videocam' : item.Type === 'series' ? 'tv' : 'game-controller'" 
+              class="type-icon">
+            </ion-icon>
+            <ion-button fill="clear" (click)="toggleFavorite($event, item)">
+              <ion-icon slot="icon-only" name="heart" class="favorite-icon active"></ion-icon>
+            </ion-button>
+          </div>
+        </ion-item>
+      }
+    </ion-list>
+  }
+
+  <!-- Loading Skeleton -->
+  @if (loading()) {
+    <ion-list class="movie-list">
+      @for (item of getSkeletonArray(); track $index) {
+        <ion-item lines="none" class="movie-item skeleton-item">
+          <ion-avatar slot="start">
+            <ion-skeleton-text [animated]="true"></ion-skeleton-text>
+          </ion-avatar>
+          <ion-label>
+            <h2><ion-skeleton-text [animated]="true" style="width: 80%"></ion-skeleton-text></h2>
+            <p><ion-skeleton-text [animated]="true" style="width: 40%"></ion-skeleton-text></p>
+          </ion-label>
+        </ion-item>
+      }
+    </ion-list>
+  }
+
+  <!-- Search Results -->
+  @if (!loading() && results().length > 0) {
+    <div class="section-header">
+      <h2>
+        <ion-icon name="search"></ion-icon>
+        Search Results
+      </h2>
+      <span class="result-count">{{ results().length }} found</span>
+    </div>
+    <ion-list class="movie-list">
+      @for (item of results(); track item.imdbID) {
+        <ion-item button [routerLink]="['/', 'movies', item.imdbID]" class="movie-item" lines="none">
+          <ion-avatar slot="start" class="movie-avatar">
+            @if (item.Poster !== 'N/A') {
+              <img [src]="item.Poster" [alt]="item.Title">
+            } @else {
+              <div class="no-poster">
+                <ion-icon name="videocam"></ion-icon>
+              </div>
+            }
+          </ion-avatar>
+
+          <ion-label class="ion-text-wrap">
+            <h2>{{ item.Title }}</h2>
+            <p>{{ item.Year }}</p>
+          </ion-label>
+
+          <div slot="end" class="item-end">
+            <ion-icon 
+              [name]="item.Type === 'movie' ? 'videocam' : item.Type === 'series' ? 'tv' : 'game-controller'" 
+              class="type-icon">
+            </ion-icon>
+            <ion-button fill="clear" (click)="toggleFavorite($event, item)">
+              <ion-icon 
+                slot="icon-only" 
+                [name]="isFavorite(item.imdbID) ? 'heart' : 'heart-outline'" 
+                [class.active]="isFavorite(item.imdbID)"
+                class="favorite-icon">
+              </ion-icon>
+            </ion-button>
+          </div>
+        </ion-item>
+      }
+    </ion-list>
+  }
+
+  <!-- Empty State -->
+  @if (!loading() && searchTerm() && results().length === 0) {
+    <div class="empty-state">
+      <ion-icon name="search" class="empty-icon"></ion-icon>
+      <h2>No Results Found</h2>
+      <p>Try searching with different keywords</p>
+    </div>
+  }
+
+  <!-- Welcome State -->
+  @if (!loading() && !searchTerm() && favorites().length === 0) {
+    <div class="empty-state welcome">
+      <ion-icon name="videocam" class="empty-icon"></ion-icon>
+      <h2>Welcome to CineSearch</h2>
+      <p>Search for your favorite movies, series, and episodes</p>
+    </div>
+  }
 </ion-content>
